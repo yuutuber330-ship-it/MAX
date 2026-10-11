@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Max</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #111827; color: #f3f4f6; margin: 0; padding: 16px; }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 26px; text-align: center; margin-bottom: 4px; }
+  .sub { text-align: center; color: #9ca3af; font-size: 14px; margin-top: 0; }
+  .card { background: #1f2937; border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+  input, button { font-size: 16px; padding: 10px; border-radius: 8px; border: none; }
+  input { background: #374151; color: #f3f4f6; }
+  button { background: #2563eb; color: white; cursor: pointer; margin: 2px; }
+  #reply { min-height: 48px; font-size: 18px; text-align: center; }
+  ul { padding-left: 18px; }
+  li button { background: #b91c1c; padding: 4px 8px; font-size: 13px; }
+  .mic { display: block; margin: 0 auto; font-size: 22px; padding: 16px 28px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Max</h1>
+  <p class="sub">Your personal assistant</p>
+  <div class="card">
+    <button class="mic" onclick="listen()">🎤 Speak</button>
+    <div id="reply"></div>
+    <input id="cmd" placeholder="Or type here" style="width:70%">
+    <button onclick="typed()">Go</button>
+    <p class="sub">Try: "open YouTube", "open example.com", "add task buy notebook", "list tasks", "timer 5", "time", "date"</p>
+  </div>
+  <div class="card">
+    <strong>Tasks</strong>
+    <ul id="tasks"></ul>
+  </div>
+  <div class="card">
+    <strong>Timer</strong>
+    <div id="timerOut"></div>
+  </div>
+</div>
+<script>
+  let tasks = [];
+  try { tasks = JSON.parse(localStorage.getItem("max-tasks") || "[]"); } catch (e) { tasks = []; }
+
+  const apps = {
+    youtube: "https://www.youtube.com",
+    maps: "https://maps.google.com",
+    google: "https://www.google.com",
+    gmail: "https://mail.google.com",
+    calendar: "https://calendar.google.com",
+    whatsapp: "https://web.whatsapp.com"
+  };
+
+  function speak(text) {
+    document.getElementById("reply").textContent = text;
+    if ("speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  }
+
+  function saveTasks() {
+    try { localStorage.setItem("max-tasks", JSON.stringify(tasks)); } catch (e) {}
+    renderTasks();
+  }
+
+  function renderTasks() {
+    const ul = document.getElementById("tasks");
+    ul.innerHTML = "";
+    tasks.forEach((t, i) => {
+      const li = document.createElement("li");
+      li.textContent = t + " ";
+      const b = document.createElement("button");
+      b.textContent = "done";
+      b.onclick = () => { tasks.splice(i, 1); saveTasks(); };
+      li.appendChild(b);
+      ul.appendChild(li);
+    });
+  }
+
+  function startTimer(minutes) {
+    const end = Date.now() + minutes * 60000;
+    const out = document.getElementById("timerOut");
+    const id = setInterval(() => {
+      const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      out.textContent = "Time left: " + Math.floor(left / 60) + "m " + (left % 60) + "s";
+      if (left <= 0) { clearInterval(id); speak("Timer finished."); }
+    }, 500);
+  }
+
+  function handle(said) {
+    const raw = said.trim();
+    const text = raw.toLowerCase();
+
+    const open = text.match(/^open (.+)$/);
+    if (open) {
+      const name = open[1].replace(/\s+/g, "");
+      if (apps[name]) { speak("Opening " + open[1]); window.location.href = apps[name]; return; }
+      if (/\.[a-z]{2,}$/.test(name)) { speak("Opening " + name); window.location.href = "https://" + name; return; }
+      speak("I don't know " + open[1] + " yet.");
+      return;
+    }
+    if (text.startsWith("add task ")) {
+      tasks.push(raw.slice(9));
+      saveTasks();
+      speak("Added task.");
+      return;
+    }
+    if (text === "list tasks" || text === "what are my tasks") {
+      speak(tasks.length ? "You have " + tasks.length + " tasks: " + tasks.join(", ") : "No tasks yet.");
+      return;
+    }
+    const timer = text.match(/^timer (\d+)$/);
+    if (timer) { startTimer(parseInt(timer[1])); speak("Timer set for " + timer[1] + " minutes."); return; }
+    if (text === "time") { speak("It is " + new Date().toLocaleTimeString()); return; }
+    if (text === "date") { speak("Today is " + new Date().toLocaleDateString()); return; }
+    speak("Sorry, I don't know that yet.");
+  }
+
+  function typed() {
+    const input = document.getElementById("cmd");
+    if (input.value.trim()) handle(input.value);
+    input.value = "";
+  }
+
+  function listen() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { speak("Voice works in Chrome. You can type instead."); return; }
+    const rec = new SR();
+    rec.lang = "en-IN";
+    rec.onresult = e => handle(e.results[0][0].transcript);
+    rec.onerror = () => speak("I didn't catch that.");
+    rec.start();
+  }
+
+  renderTasks();
+</script>
+</body>
+</html>
